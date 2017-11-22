@@ -8,6 +8,11 @@ add_library(cls_sdk SHARED sdk/cls_sdk.cc)
 set_target_properties(cls_sdk PROPERTIES VERSION "1.0.0" SOVERSION "1")
 install(TARGETS cls_sdk DESTINATION ${cls_dir})
 
+# cls_objver
+add_library(cls_objver SHARED objver/cls_objver.cc)
+set_target_properties(cls_objver PROPERTIES VERSION "1.0.0" SOVERSION "1")
+install(TARGETS cls_objver DESTINATION ${cls_dir})
+
 # cls_hello
 set(cls_hello_srcs hello/cls_hello.cc)
 add_library(cls_hello SHARED ${cls_hello_srcs})
