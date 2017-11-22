@@ -5,6 +5,7 @@
 #include "config.h"
 #include "helper.cc"
 #include <stack>
+#include <vector>
 
 using namespace std;
 
@@ -24,6 +25,8 @@ string read_curr_ver(cls_method_context_t hctx)
     decode(data, &vo);
     return vo.data;
 }
+
+vector<string> compute_delta(vector<string> &dirt_data, int start);
 
 static int get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
@@ -73,45 +76,121 @@ static int put(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     vo.type = T_FULL;
     vo.data = in->to_str();
     map_set(hctx, "VER:0", encode(&vo));
-    map_set(hctx, "CHAIN_LEN", "0");
+    map_set(hctx, "DIRT_NUM", "0");
   } else {
     // currently has object
-    // 1. read current version
-    int curr_ver = stoi(bl.to_str(), nullptr);
-
-    // 2. read current obj
-    string curr_s = read_curr_ver(hctx);
-    
-    // 3. write new obj in version
-    string new_s = in->to_str();
-    string diff = do_diff(new_s, curr_s);
     ver_obj vo;
-    int chain_len = stoi(map_get(hctx, "CHAIN_LEN"), nullptr);
-    if (diff.length() < curr_s.length() && chain_len < MAX_CHAIN_LEN) {
-      // store delta
-      vo.type = T_DELTA;
-      vo.base = curr_ver + 1;
-      vo.data = diff;
-      map_set(hctx, "CHAIN_LEN", to_string(chain_len + 1));
+    int curr_ver = stoi(bl.to_str(), nullptr);
+    int dirt_num = stoi(map_get(hctx, "DIRT_NUM"), nullptr);
+    dirt_num += 1;
+    if (dirt_num < MAX_DIRT_NUM) {
+      map_set(hctx, "DIRT_NUM", to_string(dirt_num));
     } else {
-      // store full
-      vo.type = T_FULL;
-      vo.data = curr_s;
-      map_set(hctx, "CHAIN_LEN", "0");
+      // compute deltas in batch
+      vector<string> dirt_data;
+      for (int i = 0; i < dirt_num; i++) {
+        decode(map_get(hctx, "VER:" + to_string(curr_ver - dirt_num + i + 1)), &vo);
+        dirt_data.push_back(vo.data);
+      }
+      vector<string> snapshots = compute_delta(dirt_data, curr_ver - dirt_num + 1);
+      for (int i = 0; i < dirt_num; i++) {
+        map_set(hctx, "VER:" + to_string(curr_ver - dirt_num + i + 1), snapshots[i]);
+      }
+      map_set(hctx, "DIRT_NUM", "0");
     }
-
-    map_set(hctx, "VER:" + to_string(curr_ver), encode(&vo));
     
-    // 4. update version number
+    // update version number
     map_set(hctx, "VER", to_string(curr_ver + 1));
     
-    // 5. write to the current version
+    // write to the current version
     vo.type = T_FULL;
     vo.data = in->to_str();
     map_set(hctx, "VER:" + to_string(curr_ver + 1), encode(&vo));
   }
 
   return 0;
+}
+
+int minKey(int key[], bool mstSet[]) {
+  int min = INT_MAX;
+  int minIdx;
+  for (int v = 0; v < MAX_DIRT_NUM; v++) {
+    if (mstSet[v] == false && key[v] < min) {
+      min = key[v];
+      minIdx = v;
+    }
+  }
+  return minIdx;
+}
+
+vector<string> compute_delta(vector<string> &dirt_data, int start) {
+  vector<string> ret;
+  ret.resize(dirt_data.size());
+
+  int graph[MAX_DIRT_NUM][MAX_DIRT_NUM];
+  int parent[MAX_DIRT_NUM];
+  int key[MAX_DIRT_NUM];
+  bool mstSet[MAX_DIRT_NUM];
+  // construct graph
+  for (int i = 0; i < MAX_DIRT_NUM; i++) {
+    for (int j = 0; j < MAX_DIRT_NUM; j++) {
+      if (i == j) {
+        graph[i][j] = dirt_data[i].length();
+      } else if (i < j) {
+        string delta = do_diff(dirt_data[i], dirt_data[j]);
+        graph[i][j] = delta.length();
+      } else {
+        graph[i][j] = graph[j][i];
+      }
+    }
+  }
+
+  int minLen = INT_MAX;
+  int minIdx;
+
+  for (int i = 0; i < MAX_DIRT_NUM; i++) {
+    key[i] = INT_MAX;
+    mstSet[i] = false;
+    if (dirt_data[i].length() < minLen) {
+      minIdx = i;
+    }
+  }
+
+  key[minIdx] = 0;
+  parent[minIdx] = -1;
+
+  for (int count = 0; count < MAX_DIRT_NUM - 1; count++) {
+    int u = minKey(key, mstSet);
+    mstSet[u] = true;
+    for (int v = 0; v < MAX_DIRT_NUM; v++) {
+      if (graph[u][v] < key[v] && mstSet[v] == false) {
+        parent[v] = u;
+        key[v] = graph[u][v];
+      }
+    }
+  }
+
+  ver_obj vo;
+  for (int i = 0; i < MAX_DIRT_NUM; i++) {
+    if (parent[i] == -1) {
+      vo.type = T_FULL;
+      vo.data = dirt_data[i];
+      ret[i] = encode(&vo);
+    } else {
+      string delta = do_diff(dirt_data[parent[i]], dirt_data[i]);
+      if (delta.length() < dirt_data[i].length()) {
+        vo.type = T_DELTA;
+        vo.base = parent[i] + start;
+        vo.data = delta;
+      } else {
+        vo.type = T_FULL;
+        vo.data = dirt_data[i];
+      }
+      ret[i] = encode(&vo);
+    }
+  }
+
+  return ret;
 }
 
 static int lsver(cls_method_context_t hctx, bufferlist *in, bufferlist *out)

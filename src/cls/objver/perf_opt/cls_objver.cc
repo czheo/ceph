@@ -93,14 +93,12 @@ static int put(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       vo.base = curr_ver + 1;
       vo.data = diff;
       map_set(hctx, "CHAIN_LEN", to_string(chain_len + 1));
+      map_set(hctx, "VER:" + to_string(curr_ver), encode(&vo));
     } else {
       // store full
-      vo.type = T_FULL;
-      vo.data = curr_s;
       map_set(hctx, "CHAIN_LEN", "0");
     }
 
-    map_set(hctx, "VER:" + to_string(curr_ver), encode(&vo));
     
     // 4. update version number
     map_set(hctx, "VER", to_string(curr_ver + 1));
