@@ -1,4 +1,4 @@
-#include "lib/diff_match_patch.h"
+#include "lib/diff_match_patch.cc"
 #define T_FULL 0
 #define T_DELTA 1
 #include <string>
@@ -59,14 +59,13 @@ string encode(ver_obj *obj) {
   return ret;
 }
 
-string do_diff(string &s1, string &s2) {
-  diff_match_patch<string> dmp;
-  return dmp.patch_toText(dmp.patch_make(s1, s2));
+string do_diff(string const &base, string const &s) {
+  diff_match_patch dmp;
+  return dmp.patch_toText(dmp.patch_make(base, s));
 }
 
-string do_patch(string &patch, string &s) {
-  diff_match_patch<string> dmp;
-  pair<string, vector<bool> > out
-           = dmp.patch_apply(dmp.patch_fromText(patch), s);
+string do_patch(string const &patch, string const &base) {
+  diff_match_patch dmp;
+  auto out = dmp.patch_apply(dmp.patch_fromText(patch), base);
   return out.first;
 }

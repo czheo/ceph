@@ -1,1 +1,1 @@
-#define MAX_DIRT_NUM 5
+#define MAX_DIRT_NUM 10

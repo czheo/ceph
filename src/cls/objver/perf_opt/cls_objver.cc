@@ -6,15 +6,11 @@
 #include "helper.cc"
 #include <stack>
 
-using namespace std;
 
 CLS_VER(1,0)
 CLS_NAME(objver)
 
-cls_handle_t h_class;
-cls_method_handle_t h_put;
-cls_method_handle_t h_get;
-cls_method_handle_t h_lsver;
+using namespace std;
 
 string read_curr_ver(cls_method_context_t hctx)
 {
@@ -126,9 +122,14 @@ static int lsver(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(cls_objver)
 {
   CLS_LOG(0, "loading cls_objver");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_put;
+  cls_method_handle_t h_get;
+  cls_method_handle_t h_lsver;
 
   cls_register("objver", &h_class);
 
